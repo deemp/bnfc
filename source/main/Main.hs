@@ -12,6 +12,8 @@
 
 -}
 
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -33,10 +35,25 @@ import BNFC.Options hiding (make, Backend)
 import BNFC.License ( license )
 import Paths_BNFC ( version )
 
+import Control.Exception (Handler (..), SomeException, catches, displayException)
+
 import Data.Version ( showVersion )
 import System.Environment (getArgs)
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.IO (stderr, hPutStrLn)
+import Main.Utf8 (withUtf8)
+import System.IO.CodePage (withCP65001)
+
+withCorrectLocale :: IO a -> IO a
+withCorrectLocale act = do
+  let withCorrectLocale' = withCP65001 . withUtf8
+  withCorrectLocale' act
+    `catches` [ Handler $ \(x :: ExitCode) -> exitWith x
+              , Handler $ \(x :: SomeException) ->
+                  withCorrectLocale' do
+                    putStrLn (displayException x)
+                    exitFailure
+              ]
 
 -- Print an error message and a (short) usage help and exit
 printUsageErrors :: [String] -> IO ()
@@ -46,7 +63,7 @@ printUsageErrors msg = do
   exitFailure
 
 main :: IO ()
-main = do
+main = withCorrectLocale do
   args <- getArgs
   let (mode, warnings) = parseMode args
 
